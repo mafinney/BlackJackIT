@@ -51,30 +51,43 @@ void BlackJack::Refresh() {
         deal(&player_cards, &player_total);
         hit_flag = false;
     } else if (stand_flag) {
-        if (dealer_total < 16) { // Dealer needs to hit
-            Pause(500);
-            deal(&dealer_cards, &dealer_total);
-        } else if (dealer_total > 21) { // Dealer always loses when player doesn't bust and he does
-            winner = PLAYER;
-            curr_bet *= 2;
-            stand_flag = false;
-            Pause(1000);
-            Reset();
-        } else if (player_total > dealer_total) { // Player beats dealer with no busts and player having higher hand
-            winner = PLAYER;
-            curr_bet *= 2;
-            stand_flag = false;
-            Pause(1000);
-            Reset();
-        } else { // Player loses
-            winner = DEALER;
-            curr_bet *= -1;
-            stand_flag = false;
+        if (Stand() == 1) {
             Pause(1000);
             Reset();
         }
+        Pause(500);
+
     }
     update_play();
+}
+
+int BlackJack::Stand() {
+    if (dealer_total < 16) { // Dealer needs to hit
+        // Pause(500);
+        deal(&dealer_cards, &dealer_total);
+        return 0;
+    } else if (dealer_total > 21) { // Dealer always loses when player doesn't bust and he does
+        winner = PLAYER;
+        curr_bet *= 2;
+        stand_flag = false;
+        // Pause(1000);
+        // Reset();
+        return 1;
+    } else if (player_total > dealer_total) { // Player beats dealer with no busts and player having higher hand
+        winner = PLAYER;
+        curr_bet *= 2;
+        stand_flag = false;
+        // Pause(1000);
+        // Reset();
+        return 1;
+    } else { // Player loses
+        winner = DEALER;
+        curr_bet *= -1;
+        stand_flag = false;
+        // Pause(1000);
+        // Reset();
+        return 1;
+    }
 }
 
 //END PLACEHOLDERS

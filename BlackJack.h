@@ -111,6 +111,8 @@ namespace Pinetime::Applications::Screens {
              */
             void deal(std::vector<int> *hand, int *total);
 
+            int Stand();
+
             /*HELPER FUNCTIONS*/
 
             /**
