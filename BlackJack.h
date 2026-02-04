@@ -28,6 +28,12 @@ namespace Pinetime::Applications::Screens {
                 lv_obj_t *label;
             };
 
+            struct hand {
+                lv_obj_t *label; // Display the hand
+                std::vector<int> cards; // Keep all the cards dealt to them
+                int total; // Total value of the hand
+            };
+
             enum Winner {
                 PLAYER,
                 DEALER,
@@ -80,13 +86,9 @@ namespace Pinetime::Applications::Screens {
             button hit;
             button stand;
             lv_obj_t *bet;
-            lv_obj_t *dealer_hand;
-            lv_obj_t *player_hand;
 
-            std::vector<int> dealer_cards;
-            int dealer_total;
-            std::vector<int> player_cards;
-            int player_total;
+            struct hand dealer;
+            struct hand player;
 
             bool hit_flag;
             bool stand_flag;
@@ -106,12 +108,21 @@ namespace Pinetime::Applications::Screens {
             void update_play();
 
             /**
-             * deal deals a random card to the specified hand
-             * Takes a pointer to an int vector and a pointer to an int
+             * hand_to_str converts a blackjack hand to a string.
+             * Ex: if the hand contains a 5 and a 7, this function will return "5 7 (12)"
              */
-            void deal(std::vector<int> *hand, int *total);
+            std::string hand_to_str(struct hand *h);
 
-            int Stand();
+            /**
+             * deal deals a random card to the specified hand
+             */
+            void deal(struct hand *h);
+
+            /**
+             * stand_logic figures out which player won and sets curr_bet and winner accordingly
+             * This should only be called after both players are done being dealt too
+             */
+            void stand_logic();
 
             /*HELPER FUNCTIONS*/
 

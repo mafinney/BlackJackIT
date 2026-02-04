@@ -1,3 +1,9 @@
+/**
+ * TODO:
+ *  - Make a real deck, with aces that can act as 1 or 11
+ *  - Make double down an option
+ */
+
 #include "displayapp/screens/BlackJack.h"
 #include "components/motion/MotionController.h"
 
@@ -13,81 +19,55 @@ void BlackJack::OnButtonEvent(lv_obj_t *obj, lv_event_t event) {
     if (event != LV_EVENT_CLICKED) {
         return ;
     }
-    
     if (obj == start.button) {
         update_play();
         lv_scr_load(play_scr);
     } else if (obj == bet_decr.button) {
         decr_bet();
+        update_home();
     } else if (obj == bet_incr.button) {
         incr_bet();
+        update_home();
     } else if (obj == hit.button) {
         hit_flag = true;
     } else if (obj == stand.button) {
         stand_flag = true;
+        update_play();
     }
 }
 
 void BlackJack::Refresh() {
-    // Make sure this is the play screen, as we will be updating labels only existing there
+    // Make sure this is the play screen
     if (lv_scr_act() != play_scr) {
         return ;
     }
-
-    // Initial deal phase. If the players hand has less than two cards, initial dealing isn't done
-    if (player_cards.size() < 2) {
+    // Initial deal phase
+    if (player.cards.size() < 2) {
         Pause(500);
-        if (player_cards.size() == dealer_cards.size()) {
-            deal(&dealer_cards, &dealer_total);
+        if (player.cards.size() == dealer.cards.size()) {
+            deal(&dealer);
         } else {
-            deal(&player_cards, &player_total);
+            deal(&player);
         }
-    } else if (player_total > 21) { // Player loses on bust
+    } else if (player.total > 21) { // Player loses instantly on a bust
         winner = DEALER;
         curr_bet *= -1;
         Pause(1000);
         Reset();
     } else if (hit_flag) {
-        deal(&player_cards, &player_total);
+        deal(&player);
         hit_flag = false;
     } else if (stand_flag) {
-        if (Stand() == 1) {
+        if (dealer.total < 16) {
+            Pause(500);
+            deal(&dealer);
+        } else {
             Pause(1000);
+            stand_logic();
             Reset();
         }
-        Pause(500);
-
     }
     update_play();
-}
-
-int BlackJack::Stand() {
-    if (dealer_total < 16) { // Dealer needs to hit
-        // Pause(500);
-        deal(&dealer_cards, &dealer_total);
-        return 0;
-    } else if (dealer_total > 21) { // Dealer always loses when player doesn't bust and he does
-        winner = PLAYER;
-        curr_bet *= 2;
-        stand_flag = false;
-        // Pause(1000);
-        // Reset();
-        return 1;
-    } else if (player_total > dealer_total) { // Player beats dealer with no busts and player having higher hand
-        winner = PLAYER;
-        curr_bet *= 2;
-        stand_flag = false;
-        // Pause(1000);
-        // Reset();
-        return 1;
-    } else { // Player loses
-        winner = DEALER;
-        curr_bet *= -1;
-        stand_flag = false;
-        // Pause(1000);
-        // Reset();
-        return 1;
-    }
 }
 
 //END PLACEHOLDERS
@@ -101,10 +81,10 @@ BlackJack::BlackJack(Controllers::MotionController &motionController) : motionCo
     rand_gen.seed(sseq);
     refresh_task = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
 
-    dealer_cards.clear();
-    dealer_total = 0;
-    player_cards.clear();
-    player_total = 0;
+    dealer.cards.clear();
+    dealer.total = 0;
+    player.cards.clear();
+    player.total = 0;
 
     init_home();
     init_play();
@@ -143,14 +123,12 @@ void BlackJack::update_home() {
 void BlackJack::decr_bet() {
     if (curr_bet > 1) {
         curr_bet--;
-        update_home();
     }
 }
 
 void BlackJack::incr_bet() {
     if (curr_bet < total_chips) {
         curr_bet++;
-        update_home();
     }
 }
 
@@ -159,8 +137,8 @@ void BlackJack::init_play() {
     CreateButton(&hit, play_scr, ButtonEvent, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0, (char *) "Hit");
     CreateButton(&stand, play_scr, ButtonEvent, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_BOTTOM_RIGHT, 0, 0, (char *) "Stand");
     CreateLabel(&bet, play_scr, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_BOTTOM_MID, -15, -10, NULL);
-    CreateLabel(&dealer_hand, play_scr, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_TOP_LEFT, 0, 0, (char *) "Dealer: ");
-    CreateLabel(&player_hand, play_scr, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_LEFT_MID, 0, 0, (char *) "Player: ");
+    CreateLabel(&dealer.label, play_scr, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_IN_TOP_MID, 0, 0, (char *) "Dealer: ");
+    CreateLabel(&player.label, play_scr, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, LV_ALIGN_CENTER, 0, 0, (char *) "Player: ");
     
     hit_flag = false;
     stand_flag = false;
@@ -168,15 +146,64 @@ void BlackJack::init_play() {
 
 void BlackJack::update_play() {
     lv_label_set_text_fmt(bet, "%i", curr_bet);
-    lv_label_set_text_fmt(dealer_hand, "Dealer: %i", dealer_total);
-    lv_label_set_text_fmt(player_hand, "Player: %i", player_total);
+    // Currently dealing, need to display one dealer card at most and all player cards
+    if (player.cards.size() < 2) {
+        // Display either 0 or just the first dealer card
+        if (dealer.cards.empty()) {
+            lv_label_set_text_static(dealer.label, (char *) "0");
+        } else {
+            lv_label_set_text_fmt(dealer.label, "%i", dealer.cards.front());
+        }
+        // Display either 0 or all the player cards
+        if (player.cards.empty()) {
+            lv_label_set_text_static(player.label, (char *) "0");
+        } else {
+            lv_label_set_text(player.label, hand_to_str(&player).c_str());
+        }
+    } else if (!stand_flag) { // If not standing, display the first dealer card and all player cards
+        lv_label_set_text_fmt(dealer.label, "%i", dealer.cards.front());
+        lv_label_set_text(player.label, hand_to_str(&player).c_str());
+    } else { // When standing, display all cards from both hands
+        lv_label_set_text(dealer.label, hand_to_str(&dealer).c_str());
+        lv_label_set_text(player.label, hand_to_str(&player).c_str());
+    }
+    lv_obj_realign(dealer.label);
+    lv_obj_realign(player.label);
 }
 
-void BlackJack::deal(std::vector<int> *hand, int *total) {
+std::string BlackJack::hand_to_str(struct hand *h) {
+    std::string str;
+    for (int curr : h->cards) {
+        str += std::to_string(curr);
+        str += " ";
+    }
+    str += "(";
+    str += std::to_string(h->total);
+    str += ")\n";
+    return str;
+}
+
+void BlackJack::deal(struct hand *h) {
     std::uniform_int_distribution<> distrib(1, 11);
     int value = distrib(rand_gen);
-    hand->push_back(value);
-    *total += value;
+    h->cards.push_back(value);
+    h->total += value;
+}
+
+void BlackJack::stand_logic() {
+    if (dealer.total > 21) { // Dealer always loses when player doesn't bust and he does
+        winner = PLAYER;
+        curr_bet *= 2;
+        stand_flag = false;
+    } else if (player.total > dealer.total) { // Player beats dealer with no busts and player having higher hand
+        winner = PLAYER;
+        curr_bet *= 2;
+        stand_flag = false;
+    } else { // Player loses
+        winner = DEALER;
+        curr_bet *= -1;
+        stand_flag = false;
+    }
 }
 
 /******HELPER FUNCTIONS******/
@@ -185,10 +212,10 @@ void BlackJack::Pause(int ms) {
 }
 
 void BlackJack::Reset() {
-    dealer_cards.clear();
-    dealer_total = 0;
-    player_cards.clear();
-    player_total = 0;
+    dealer.cards.clear();
+    dealer.total = 0;
+    player.cards.clear();
+    player.total = 0;
 
     total_chips += curr_bet;
     if (total_chips >= 5) {
